@@ -1,0 +1,17 @@
+{
+  "name": "edville-moggmeter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Edville Moggmeter: an inline Telegram bot that rates your Edvillianity out of 1000.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "grammy": "^1.46.0"
+  }
+}
