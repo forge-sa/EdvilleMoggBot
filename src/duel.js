@@ -40,7 +40,7 @@ const VERDICTS = [
   [0.03, 'won by a single jawline 😮‍💨'],
   [0.1, 'clean mog 🗿'],
   [0.2, 'brutal mog 🔥'],
-  [Infinity, 'total annihilation 💀'],
+  [Infinity, 'total appreciation ✅'],
 ];
 
 export function offerText(challenger, targetUsername) {
