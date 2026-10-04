@@ -42,8 +42,3 @@ export function durationLabel(fromIso, toIso) {
   return [years && `${years} y`, rest && `${rest} mo`].filter(Boolean).join(' ');
 }
 
-/** 1 September that started the current school year. */
-export function schoolYearStart(iso = todayIso()) {
-  const [y, m] = iso.split('-').map(Number);
-  return `${m >= 9 ? y : y - 1}-09-01`;
-}
