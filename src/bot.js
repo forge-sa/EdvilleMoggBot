@@ -19,17 +19,28 @@ bot.use(async (ctx, next) => {
 
 // ---------------------------------------------------------------------------
 // Groups the bot is a member of: count messages per person (feeds duels), and
-// remember which group a duel offer was posted in.
+// note which group a card or a duel offer was posted in.
 
 bot.chatType(['group', 'supergroup']).on('message', async (ctx, next) => {
   if (ctx.from && !ctx.from.is_bot) db.countMessage(ctx.chat.id, ctx.from.id);
 
   if (ctx.message.via_bot?.id === ctx.me.id) {
-    const data = ctx.message.reply_markup?.inline_keyboard
-      .flat()
-      .find((button) => button.callback_data?.startsWith('du:'))?.callback_data;
-    const nonce = data?.match(DUEL_DATA)?.[2];
-    if (nonce) db.rememberDuelChat(nonce, ctx.chat.id);
+    for (const button of ctx.message.reply_markup?.inline_keyboard.flat() ?? []) {
+      const data = button.callback_data ?? '';
+      const nonce = data.match(DUEL_DATA)?.[2];
+      if (nonce) db.rememberDuelChat(nonce, ctx.chat.id);
+      const owner = data.match(/^v:(\d+):/)?.[1];
+      if (owner) db.sawCard(Number(owner), `c:${ctx.chat.id}`);
+    }
+  }
+  await next();
+});
+
+// Any press on a card's buttons proves the card is in that chat, even one the
+// bot isn't a member of (and even when it's the owner pressing).
+bot.callbackQuery(/^(?:v|d):(\d+)(?::-?1)?$/, async (ctx, next) => {
+  if (ctx.callbackQuery.inline_message_id) {
+    db.sawCard(Number(ctx.match[1]), `i:${ctx.callbackQuery.chat_instance}`);
   }
   await next();
 });
@@ -158,7 +169,16 @@ bot.callbackQuery(DUEL_DATA, async (ctx) => {
     return alert("The challenger's card isn't available right now.");
   }
 
+  // You can only duel in a chat where you've shown your card.
   const chatId = db.duelChat(nonce);
+  const chatKeys = [`i:${ctx.callbackQuery.chat_instance}`, ...(chatId == null ? [] : [`c:${chatId}`])];
+  if (!db.hasShownCard(challengerId, chatKeys)) {
+    return alert(`${challenger.name} hasn't shown their Moggmeter card in this chat yet, so they can't duel here.`);
+  }
+  if (!db.hasShownCard(opponent.user_id, chatKeys)) {
+    return alert(`Show your Moggmeter card in this chat first: type @${ctx.me.username} and press "Send your card".`);
+  }
+
   const fighter = (user) => ({
     user,
     rep: db.rep(user.user_id),

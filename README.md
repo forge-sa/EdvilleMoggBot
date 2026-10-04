@@ -50,6 +50,13 @@ The bot doesn't have to be a member of that chat.
 * **Moggduels** are decided by hidden factors (`src/duel.js`). Users only see
   the winner and a vague margin. Keep that file private: nothing in it is
   meant to be explained to users.
+  * **You can only duel in a chat where you've shown your card**, and that
+    goes for both the challenger and whoever accepts. An inline message
+    doesn't tell the bot which chat it's in, so the bot learns where a card
+    was shown in two ways: from the "via @bot" message in a group the bot is a
+    member of (always, as soon as it's posted), or from anyone pressing one of
+    the card's buttons (in any chat, the owner included). A card nobody has
+    touched yet in a chat without the bot doesn't count there.
   * If the bot is a **member of a group with privacy mode off**, it counts
     how many messages each person writes there (counts only, no content), and
     duels posted in that group use them. In BotFather: `/setprivacy` →

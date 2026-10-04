@@ -74,6 +74,16 @@ db.exec(`
     chat_id INTEGER NOT NULL
   );
 
+  -- Chats a user's card has been shown in; you can only duel where you have.
+  -- An inline message doesn't tell the bot its chat, so there are two keys:
+  -- 'c:<chat id>'       the card's "via @bot" message, seen in a group the bot is in
+  -- 'i:<chat_instance>' someone pressed a button on the card, in any chat
+  CREATE TABLE IF NOT EXISTS card_sightings (
+    user_id  INTEGER NOT NULL,
+    chat_key TEXT    NOT NULL,
+    PRIMARY KEY (user_id, chat_key)
+  );
+
   -- Multi-step dialogs (setup, fix, disagree) survive restarts.
   CREATE TABLE IF NOT EXISTS sessions (
     user_id INTEGER PRIMARY KEY,
@@ -127,6 +137,8 @@ const q = {
   userMessages: db.prepare('SELECT messages FROM activity WHERE chat_id = ? AND user_id = ?'),
   rememberDuelChat: db.prepare('INSERT OR IGNORE INTO duel_chats (nonce, chat_id) VALUES (?, ?)'),
   duelChat: db.prepare('SELECT chat_id FROM duel_chats WHERE nonce = ?'),
+  sawCard: db.prepare('INSERT OR IGNORE INTO card_sightings (user_id, chat_key) VALUES (?, ?)'),
+  cardSeen: db.prepare('SELECT 1 FROM card_sightings WHERE user_id = ? AND chat_key = ?'),
   getSession: db.prepare('SELECT data FROM sessions WHERE user_id = ?'),
   putSession: db.prepare('INSERT OR REPLACE INTO sessions (user_id, data) VALUES (?, ?)'),
   dropSession: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
@@ -224,6 +236,15 @@ export function rememberDuelChat(nonce, chatId) {
 
 export function duelChat(nonce) {
   return q.duelChat.get(nonce)?.chat_id ?? null;
+}
+
+export function sawCard(userId, chatKey) {
+  q.sawCard.run(userId, chatKey);
+}
+
+/** Whether the user's card was shown in the chat known by any of chatKeys. */
+export function hasShownCard(userId, chatKeys) {
+  return chatKeys.some((key) => q.cardSeen.get(userId, key));
 }
 
 export function getSession(userId) {
