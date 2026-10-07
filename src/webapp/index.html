@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Edvies</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #17181c);
+    --bg2: var(--tg-theme-secondary-bg-color, #232429);
+    --text: var(--tg-theme-text-color, #f2f3f5);
+    --hint: var(--tg-theme-hint-color, #8d9099);
+    --accent: var(--tg-theme-button-color, #3d8bfd);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 2; background: var(--bg);
+    padding: 14px 16px 10px; display: grid; gap: 12px;
+  }
+  .top { display: flex; align-items: center; justify-content: space-between; }
+  h1 { margin: 0; font-size: 22px; }
+  .coins { background: var(--bg2); border-radius: 999px; padding: 6px 12px; font-weight: 600; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg2); border-radius: 10px; padding: 3px; }
+  .tabs button {
+    border: 0; background: none; color: var(--hint); font: inherit; font-weight: 600;
+    padding: 8px; border-radius: 8px;
+  }
+  .tabs button.on { background: var(--bg); color: var(--text); }
+  .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .chips button {
+    flex: none; border: 0; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px;
+    background: var(--bg2); color: var(--hint);
+  }
+  .chips button.on { color: #fff; background: var(--chip, var(--accent)); }
+  main { padding: 4px 16px 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .tile {
+    position: relative; aspect-ratio: 3 / 4; border-radius: 14px; overflow: hidden; border: 0; padding: 0;
+    color: #fff; text-align: left; font: inherit; cursor: pointer;
+    background: linear-gradient(165deg, var(--c1), var(--c2));
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .28);
+  }
+  .tile .rarity {
+    position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; background: rgba(0, 0, 0, .28); padding: 2px 7px; border-radius: 6px;
+  }
+  .tile img {
+    position: absolute; inset: 14% 8% 30%; width: 84%; height: 56%; object-fit: contain;
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .3));
+  }
+  .tile .info {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 10px 9px;
+    background: linear-gradient(transparent, rgba(0, 0, 0, .55));
+  }
+  .tile .name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .stats { font-size: 12px; opacity: .92; }
+  .tile .price {
+    position: absolute; top: 8px; right: 8px; font-size: 12px; font-weight: 700;
+    background: rgba(0, 0, 0, .35); padding: 2px 7px; border-radius: 6px;
+  }
+  .tile.owned .price { background: rgba(255, 255, 255, .9); color: #1a7f37; }
+  .empty { text-align: center; color: var(--hint); padding: 48px 12px; }
+  .sheet {
+    position: fixed; inset: 0; z-index: 5; background: rgba(0, 0, 0, .55);
+    display: none; align-items: flex-end; justify-content: center;
+  }
+  .sheet.open { display: flex; }
+  .sheet .panel {
+    width: 100%; max-width: 480px; background: var(--bg); border-radius: 18px 18px 0 0;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); display: grid; gap: 12px;
+  }
+  .sheet .tile { width: min(260px, 70vw); justify-self: center; cursor: default; }
+  .sheet .creator { text-align: center; color: var(--hint); font-size: 13px; }
+  .btn {
+    border: 0; border-radius: 10px; padding: 12px; font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+  }
+  .btn.ghost { background: var(--bg2); color: var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <div class="top"><h1>🐉 Edvies</h1><div class="coins" id="coins">🪙 …</div></div>
+  <div class="tabs">
+    <button id="tab-collection" class="on">My collection</button>
+    <button id="tab-shop">Shop</button>
+  </div>
+  <div class="chips" id="chips" hidden></div>
+</header>
+<main><div class="grid" id="grid"></div><div class="empty" id="empty" hidden></div></main>
+<div class="sheet" id="sheet"><div class="panel" id="panel"></div></div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready();
+tg?.expand();
+
+let data = null;
+let tab = 'collection';
+let rarityFilter = null;
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, children = []) => {
+  const node = Object.assign(document.createElement(tag), props);
+  for (const child of children) node.append(child);
+  return node;
+};
+
+async function api(path, body = {}) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, initData: tg?.initData ?? '' }),
+  });
+  const json = await res.json();
+  if (json.coins !== undefined) data = json;
+  if (!res.ok) throw new Error(json.error || 'Something went wrong');
+  return json;
+}
+
+const statsText = (edvie) => data.stats.map((s) => `${s.emoji} ${edvie.stats[s.key]}`).join('  ');
+
+function tile(edvie, { shop = false, onClick } = {}) {
+  const [c1, c2] = data.rarities[edvie.rarity].colors;
+  const node = el('button', { className: 'tile' + (shop && edvie.owned ? ' owned' : '') }, [
+    el('span', { className: 'rarity', textContent: data.rarities[edvie.rarity].label }),
+    el('img', { src: `sprite/${edvie.id}.png`, alt: '', loading: 'lazy' }),
+    el('div', { className: 'info' }, [
+      el('div', { className: 'name', textContent: edvie.name }),
+      el('div', { className: 'stats', textContent: statsText(edvie) }),
+    ]),
+  ]);
+  if (shop) node.append(el('span', { className: 'price', textContent: edvie.owned ? '✓ Owned' : `🪙 ${edvie.cost}` }));
+  node.style.setProperty('--c1', c1);
+  node.style.setProperty('--c2', c2);
+  if (onClick) node.onclick = onClick;
+  return node;
+}
+
+function renderChips() {
+  const chips = $('chips');
+  chips.hidden = tab !== 'shop';
+  chips.replaceChildren(
+    el('button', { className: rarityFilter === null ? 'on' : '', textContent: 'All', onclick: () => setFilter(null) }),
+    ...data.rarities.map((r, i) => {
+      const chip = el('button', { className: rarityFilter === i ? 'on' : '', textContent: r.label, onclick: () => setFilter(i) });
+      chip.style.setProperty('--chip', r.colors[1]);
+      return chip;
+    }),
+  );
+}
+
+function setFilter(value) {
+  rarityFilter = value;
+  render();
+}
+
+function render() {
+  $('coins').textContent = `🪙 ${data.coins}`;
+  $('tab-collection').className = tab === 'collection' ? 'on' : '';
+  $('tab-shop').className = tab === 'shop' ? 'on' : '';
+  renderChips();
+
+  const list = tab === 'collection'
+    ? data.collection
+    : data.shop.filter((e) => rarityFilter === null || e.rarity === rarityFilter);
+  $('grid').replaceChildren(...list.map((edvie) =>
+    tile(edvie, { shop: tab === 'shop', onClick: () => (tab === 'shop' ? buy(edvie) : details(edvie)) })));
+  $('empty').hidden = list.length > 0;
+  $('empty').textContent = tab === 'collection'
+    ? 'No Edvies yet. Win Moggduels to earn coins, then visit the shop.'
+    : 'Nothing here yet. Make the first Edvie with /newedvie in the bot.';
+}
+
+function buy(edvie) {
+  if (edvie.owned) return details(edvie);
+  if (data.coins < edvie.cost) {
+    tg?.HapticFeedback?.notificationOccurred('error');
+    return tg?.showAlert(`${edvie.name} costs ${edvie.cost} 🪙, you have ${data.coins}. Win Moggduels and Edvie battles to earn more.`);
+  }
+  tg?.showConfirm(`Buy ${edvie.name} for ${edvie.cost} 🪙?`, async (ok) => {
+    if (!ok) return;
+    try {
+      await api('api/buy', { id: edvie.id });
+      tg?.HapticFeedback?.notificationOccurred('success');
+      render();
+      details(data.shop.find((e) => e.id === edvie.id));
+    } catch (err) {
+      tg?.HapticFeedback?.notificationOccurred('error');
+      render();
+      tg?.showAlert(err.message);
+    }
+  });
+}
+
+function details(edvie) {
+  const send = el('button', { className: 'btn', textContent: '📤 Send to a chat' });
+  send.onclick = () => {
+    try {
+      tg.switchInlineQuery(edvie.name, ['users', 'groups', 'supergroups']);
+    } catch {
+      tg?.showAlert(`Type @${tg?.initDataUnsafe?.receiver?.username ?? 'the bot'} ${edvie.name} in any chat.`);
+    }
+  };
+  const close = el('button', { className: 'btn ghost', textContent: 'Close', onclick: () => $('sheet').classList.remove('open') });
+  $('panel').replaceChildren(
+    tile(edvie),
+    el('div', { className: 'creator', textContent: `🎨 by ${edvie.creator}` }),
+    ...(tab === 'collection' || edvie.owned ? [send] : []),
+    close,
+  );
+  $('sheet').classList.add('open');
+}
+
+$('sheet').onclick = (event) => { if (event.target === $('sheet')) $('sheet').classList.remove('open'); };
+$('tab-collection').onclick = () => { tab = 'collection'; render(); };
+$('tab-shop').onclick = () => { tab = 'shop'; render(); };
+
+api('api/state').then(render).catch((err) => {
+  $('empty').hidden = false;
+  $('empty').textContent = err.message;
+});
+</script>
+</body>
+</html>
