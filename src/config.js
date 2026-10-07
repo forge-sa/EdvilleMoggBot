@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
 
@@ -41,6 +42,20 @@ export const config = {
   // disagreement counts as devDisputeWeight. Never shown to users.
   disputeThreshold: 5,
   devDisputeWeight: 5,
+
+  // Edvies. Developers (devIds) are the admins who approve them.
+  coinsPerWin: { moggduel: 25, edvieBattle: 40 },
+  maxPendingEdvies: 3,
+  // An Edvie that fought sits out its trainer's next N battles (fewer when they
+  // own fewer Edvies, so there's always one that can fight).
+  edvieRestBattles: 3,
+  // Public HTTPS address of the Edvies Mini App (collection + shop), served by
+  // this process on webappPort. Without it the Mini App is simply off.
+  // Always ends in '/', so the page's relative links work under a subpath too.
+  webappUrl: process.env.WEBAPP_URL?.trim().replace(/\/*$/, '/').replace(/^\/$/, '') || null,
+  webappPort: number('WEBAPP_PORT', 8080),
 };
+
+config.spriteDir = join(dirname(config.dbPath), 'edvies');
 
 export const isDev = (userId) => config.devIds.includes(userId);

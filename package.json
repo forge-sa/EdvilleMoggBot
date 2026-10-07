@@ -12,6 +12,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "grammy": "^1.46.0"
+    "grammy": "^1.46.0",
+    "jimp": "^1.6.1"
   }
 }

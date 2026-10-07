@@ -56,13 +56,15 @@ export function offerText(challenger, targetUsername) {
   ].join('\n');
 }
 
-export function resultText({ winner, loser, margin }) {
+/** coins: what the winner earned (0 if nothing). */
+export function resultText({ winner, loser, margin }, coins = 0) {
   const verdict = VERDICTS.find(([max]) => margin < max)[1];
   return [
     '⚔️ <b>MOGGDUEL</b>',
     '',
     `🏆 <b>${displayName(winner)}</b> mogged <b>${displayName(loser)}</b>`,
     `<i>${verdict}</i>`,
+    ...(coins ? ['', `🪙 +${coins} coins for ${displayName(winner)}`] : []),
   ].join('\n');
 }
 

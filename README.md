@@ -8,6 +8,8 @@ or group and tap one of the buttons that pop up above the message box:
   ⬇️ Depreciate · 🙅 Disagree** under it.
 * **⚔️ Press to start a Moggduel**: anyone with a card can accept.
   `@EdvilleMoggBot @username` challenges one person only.
+* **Your Edvies**, as cards: send one to show it off, with a **⚔️ Battle**
+  button under it. `@EdvilleMoggBot <name>` finds one by name.
 
 The bot doesn't have to be a member of that chat.
 
@@ -64,6 +66,74 @@ The bot doesn't have to be a member of that chat.
   * Everywhere else (DMs, groups without the bot) the bot can't see messages,
     so that part is random.
 
+## Edvies
+
+Edvies are collectible creatures, and **all of them are made by the
+community**. The code contains none; they live in the database.
+
+* **Making one** (`/newedvie` in the bot's chat): rarity → name → cost →
+  sprite → specs → preview of the rendered card → *Send for review*.
+  * **Rarity**, rarest last, each with its own colour and price range:
+    | rarity     | colour | price (🪙) |
+    |------------|--------|-----------:|
+    | Common     | grey   |   50–100   |
+    | Rare       | green  |  100–200   |
+    | Super Rare | blue   |  200–350   |
+    | Epic       | purple |  350–600   |
+    | Mythic     | red    |  600–1000  |
+    | Legendary  | yellow | 1000–2000  |
+  * **Name**: 2–20 Latin letters/digits (the card's font is Latin-only), unique.
+  * **Sprite**: a photo, or better a PNG with a transparent background sent
+    as a file.
+  * **Specs**: exactly 100 points split between ❤️ Health, ⚔️ Damage and
+    ⚡ Speed, at least 30 each, so every spec ends up between 30 and 40 and
+    nobody can build a 1-HP sprinter. The list of specs is `STATS` in
+    `src/edvie.js`; a new spec added there is asked for, stored and shown
+    everywhere (what it *does* in battle still needs code).
+  * At most 3 waiting for review per person.
+* **Review**: every submission goes to the developers (`DEV_IDS`) as a
+  rendered card with **Approve**, **Reject** (with an optional reason), and
+  **edit Name / Rarity / Cost / Specs** buttons. `/review` lists everything
+  still waiting. Nothing reaches the shop before it's approved; the creator
+  is told either way and gets their Edvie for free when it's approved.
+* **Cards** are rendered images (`src/edvieImage.js`): the rarity's colour as
+  background, the sprite, the name and specs. That's what the shop, the
+  collection and inline mode show.
+* **Coins**: +25 for winning a Moggduel, +40 for winning an Edvie battle, once
+  per opponent per kind per day (no farming with a friend). Spent in the
+  shop. Amounts are `coinsPerWin` in `src/config.js`.
+* **Shop and collection** in the bot's chat: `/shop`, `/collection`,
+  `/edvies` (coins and everything else). One card at a time with ◀️ ▶️.
+* **Edvie battles**: someone sends an Edvie into a chat; anyone else taps
+  **⚔️ Battle**, picks one of their own Edvies (inline, as cards) and presses
+  **⚔️ Fight!**. The faster Edvie strikes first (a coin flip on equal
+  Speed), then they take turns: a hit is a quarter of the attacker's Damage
+  ±20%, one in ten is a critical ×1.5. Each Fight message is fought once; the
+  Battle button can be used again and again.
+  * **Resting**: an Edvie that fought (attacking or defending) sits out its
+    trainer's next 3 battles, or fewer if they own fewer Edvies: with one
+    Edvie it never rests, with two they alternate. So there's always one that
+    can fight, and nobody wins everything with their single best Edvie.
+    Resting Edvies aren't offered when picking, and a resting one that's
+    been challenged says so. `edvieRestBattles` in `src/config.js`.
+* **The Edvies app** (Mini App, optional): the collection and the shop as a
+  grid of cards coloured by rarity, with buying and "send to a chat". It
+  opens from the bot's menu button, `/edvies`, and the button above inline
+  results.
+
+### Hosting the Edvies app
+
+Telegram only opens Mini Apps over **HTTPS**. The bot serves the app itself
+on `WEBAPP_PORT` (8080); put an HTTPS address in front of it and set
+`WEBAPP_URL` to that address:
+
+* **Server with a domain**: a reverse proxy with automatic TLS, e.g. Caddy:
+  `edvies.example.com { reverse_proxy localhost:8080 }`.
+* **Quick test**: `cloudflared tunnel --url http://localhost:8080` prints a
+  temporary `https://….trycloudflare.com` address (it changes every run).
+
+Without `WEBAPP_URL` everything else works; the app buttons just don't appear.
+
 ## Setup
 
 1. In [@BotFather](https://t.me/BotFather): `/newbot` (or use an existing
@@ -86,4 +156,8 @@ State lives in one SQLite file (`DB_PATH`). Node 22+ is required (built-in
 
 ## Commands (private chat)
 
-`/start`, `/me`, `/fix`, `/help`, `/cancel`
+`/start`, `/me`, `/edvies`, `/shop`, `/collection`, `/newedvie`, `/fix`,
+`/help`, `/cancel`. Developers also get `/review`.
+
+Sprites are stored next to the database, in `edvies/` inside `DB_PATH`'s
+folder. Back that folder up together with the database.

@@ -6,6 +6,7 @@ import { FIELDS, FIELD_ORDER, consensus } from './fields.js';
 import { HTML, cardKeyboard, cardText, displayName, hiddenCardText, ownCardKeyboard } from './card.js';
 import { DUEL_DATA, fight, offerKeyboard, offerText, resultText } from './duel.js';
 import { edvillianity, tier } from './score.js';
+import { BATTLE_QUERY, battlePickResults, edvies, sendGallery, showHub, showcaseResults } from './edvieBot.js';
 
 export const bot = new Bot(config.token);
 
@@ -45,9 +46,16 @@ bot.callbackQuery(/^(?:v|d):(\d+)(?::-?1)?$/, async (ctx, next) => {
   await next();
 });
 
+// Edvies: making, review, shop, collection, battles (src/edvieBot.js).
+bot.use(edvies);
+
 // ---------------------------------------------------------------------------
-// Inline mode: "@bot" in any chat offers the caller's own card and a duel.
-// There is no way to pull up somebody else's card.
+// Inline mode: "@bot" in any chat offers the caller's own card, a duel and
+// their Edvies. There is no way to pull up somebody else's card.
+//   ""            card, duel, then Edvies
+//   "@user"/duel  a duel only that person can accept, first
+//   "vs …"        picking an Edvie to fight someone's Edvie (from a Battle button)
+//   anything else Edvies whose name contains it
 
 bot.on('inline_query', async (ctx) => {
   const user = db.getUser(ctx.from.id);
@@ -66,8 +74,20 @@ bot.on('inline_query', async (ctx) => {
     });
   }
 
-  // "@bot @someone" challenges that person only.
   const query = ctx.inlineQuery.query.trim();
+  const battle = query.match(BATTLE_QUERY);
+  if (battle) {
+    const { results, button } = battlePickResults(user, battle);
+    return ctx.answerInlineQuery(results, { ...opts, ...(button && { button }) });
+  }
+
+  const wantsDuel = query.startsWith('@') || /^duel$/i.test(query);
+  const offset = Number(ctx.inlineQuery.offset) || 0;
+  const { results: edvieResults, nextOffset } = showcaseResults(user, wantsDuel ? null : query, offset);
+  const pageOpts = { ...opts, next_offset: nextOffset };
+  if (offset > 0) return ctx.answerInlineQuery(edvieResults, pageOpts);
+
+  // "@bot @someone" challenges that person only.
   let target = query.match(/@([A-Za-z0-9_]{4,32})/)?.[1] ?? null;
   if (target && target.toLowerCase() === user.username?.toLowerCase()) target = null;
   const nonce = randomBytes(4).toString('hex');
@@ -90,7 +110,15 @@ bot.on('inline_query', async (ctx) => {
     reply_markup: offerKeyboard(user.user_id, nonce, target),
   };
 
-  return ctx.answerInlineQuery(query ? [duel, card] : [card, duel], opts);
+  let results;
+  if (wantsDuel) results = [duel, card];
+  else if (query) results = edvieResults.length ? edvieResults : [duel, card];
+  else results = [card, duel, ...edvieResults];
+
+  const button = config.webappUrl
+    ? { text: '🎴 My Edvies', web_app: { url: config.webappUrl } }
+    : { text: '🐉 Edvies: collection & shop', start_parameter: 'edvies' };
+  return ctx.answerInlineQuery(results, { ...pageOpts, button });
 });
 
 // ---------------------------------------------------------------------------
@@ -189,11 +217,12 @@ bot.callbackQuery(DUEL_DATA, async (ctx) => {
   if (!db.recordDuel(inlineId, challengerId, opponent.user_id, result.winner.user_id)) {
     return ctx.answerCallbackQuery({ text: 'This duel is already over.' });
   }
+  const paid = db.reward(result.winner.user_id, result.loser.user_id, 'moggduel', config.coinsPerWin.moggduel);
   await ctx.answerCallbackQuery({
     text: result.winner.user_id === opponent.user_id ? '🏆 You won!' : '💀 You got mogged.',
   });
   // No reply_markup: the accept button disappears.
-  await editQuietly(ctx, resultText(result), HTML);
+  await editQuietly(ctx, resultText(result, paid), HTML);
 });
 
 // ---------------------------------------------------------------------------
@@ -204,6 +233,8 @@ const pm = bot.chatType('private');
 pm.command('start', async (ctx) => {
   const dispute = ctx.match.match(/^d_(\d+)$/);
   if (dispute) return startDispute(ctx, Number(dispute[1]));
+  if (ctx.match === 'edvies') return showHub(ctx);
+  if (ctx.match === 'shop') return sendGallery(ctx, 's');
   return showOwnCard(ctx, '👋 Welcome back. Here is your card:');
 });
 
@@ -238,9 +269,13 @@ pm.command('help', (ctx) =>
       '⬆️ Appreciate / ⬇️ Depreciate: rate the student (press again to take it back)',
       '🙅 Disagree: think something on the card is wrong? Claim the real value.',
       '',
+      '🐉 <b>Edvies</b> are creatures made by students. Earn coins by winning Moggduels and Edvie battles, buy Edvies in the shop, and send them into battle from any chat.',
+      '',
       "You can't change your own info. If others disagree with your card, it gets hidden until you fix it.",
       '',
       '/me: your card',
+      '/edvies: coins, collection and shop',
+      '/newedvie: make your own Edvie',
       '/fix: fix your card when asked to',
       '/cancel: stop what you were doing',
     ].join('\n'),
@@ -281,6 +316,7 @@ pm.on('message:text', (ctx) => answer(ctx, ctx.message.text));
 /** text is null when the "didn't take it" button was pressed. */
 async function answer(ctx, text) {
   const session = db.getSession(ctx.from.id);
+  if (session?.flow?.startsWith('edvie')) return; // handled in edvieBot.js
   if (!session) {
     if (text === null) return;
     return ctx.reply(
@@ -480,15 +516,30 @@ bot.catch(({ error, ctx }) => {
 });
 
 export async function setupProfile() {
-  await bot.api.setMyCommands(
-    [
-      { command: 'me', description: 'Your Moggmeter card' },
-      { command: 'fix', description: 'Fix your card when asked to' },
-      { command: 'help', description: 'How it works' },
-      { command: 'cancel', description: 'Stop the current dialog' },
-    ],
-    { scope: { type: 'all_private_chats' } },
-  );
+  const commands = [
+    { command: 'me', description: 'Your Moggmeter card' },
+    { command: 'edvies', description: 'Coins, collection and shop' },
+    { command: 'shop', description: 'Buy Edvies' },
+    { command: 'collection', description: 'Your Edvies' },
+    { command: 'newedvie', description: 'Make your own Edvie' },
+    { command: 'fix', description: 'Fix your card when asked to' },
+    { command: 'help', description: 'How it works' },
+    { command: 'cancel', description: 'Stop the current dialog' },
+  ];
+  await bot.api.setMyCommands(commands, { scope: { type: 'all_private_chats' } });
+  // Developers also review Edvies. Fails until they've started the bot once.
+  for (const devId of config.devIds) {
+    await bot.api
+      .setMyCommands([...commands, { command: 'review', description: 'Edvies waiting for approval' }], {
+        scope: { type: 'chat', chat_id: devId },
+      })
+      .catch(() => {});
+  }
+  if (config.webappUrl) {
+    await bot.api.setChatMenuButton({
+      menu_button: { type: 'web_app', text: 'Edvies', web_app: { url: config.webappUrl } },
+    });
+  }
   // setMyName is heavily rate limited, so only call it when it would change something.
   if ((await bot.api.getMyName()).name !== config.botName) await bot.api.setMyName(config.botName);
   await bot.api.setMyShortDescription(

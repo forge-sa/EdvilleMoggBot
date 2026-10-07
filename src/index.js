@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { bot, setupProfile } from './bot.js';
+import { startWebApp } from './webapp.js';
 
 await bot.init();
 if (!bot.botInfo.supports_inline_queries) {
@@ -7,7 +8,14 @@ if (!bot.botInfo.supports_inline_queries) {
 }
 await setupProfile().catch((err) => console.warn('Could not update bot name/commands:', err.message));
 
-for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => bot.stop());
+const webApp = config.webappUrl ? startWebApp() : null;
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.once(signal, () => {
+    webApp?.close();
+    bot.stop();
+  });
+}
 
 await bot.start({
   allowed_updates: ['message', 'inline_query', 'callback_query'],
