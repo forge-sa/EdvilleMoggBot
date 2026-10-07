@@ -19,11 +19,12 @@ function line(user, field, extra = '') {
   return `${def.emoji} ${def.label}: <b>${def.format(user[field])}</b>${extra}`;
 }
 
-/** stats: { rep, wins, losses } */
-export function cardText(user, { rep, wins, losses }) {
+/** stats: { rep, wins, losses, creatorTitle } (creatorTitle: e.g. "Creator Rank III", or null) */
+export function cardText(user, { rep, wins, losses, creatorTitle }) {
   const points = edvillianity(user);
   const username = user.username ? ` @${escape(user.username)}` : '';
-  const badge = isDev(user.user_id) ? '\n🛠 <i>Moggmeter Developer</i>' : '';
+  const badge =
+    (isDev(user.user_id) ? '\n🛠 <i>Moggmeter Developer</i>' : '') + (creatorTitle ? `\n🎨 <b>${creatorTitle}</b>` : '');
   const repLabel = rep > 0 ? `+${rep}` : String(rep);
 
   return [

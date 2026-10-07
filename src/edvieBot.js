@@ -9,6 +9,8 @@ import {
   STATS,
   battleLog,
   completeStats,
+  creatorRank,
+  creatorTitle,
   describe,
   parseCost,
   parseName,
@@ -31,9 +33,12 @@ const CAPTION = { parse_mode: 'HTML' };
 const spritePath = (id) => join(config.spriteDir, `${id}.png`);
 const draftPath = (userId) => join(config.spriteDir, `draft-${userId}.png`);
 
+/** "Elon Musk (III)": the creator's name with their creator rank, if any. */
 function creatorName(edvie) {
   const user = db.getUser(edvie.creator_id);
-  return user ? displayName(user) : 'someone';
+  if (!user) return 'someone';
+  const rank = creatorRank(db.approvedCount(user.user_id));
+  return rank ? `${displayName(user)} (${rank})` : displayName(user);
 }
 
 const ignoreNotModified = (err) => {
@@ -376,8 +381,10 @@ edvies.callbackQuery(/^ea:(ok|no|name|rarity|cost|stats):(\d+)$/, async (ctx) =>
       ...CAPTION,
       caption: `✅ <b>Released:</b> ${escape(edvie.name)}`,
     });
+    const rankBefore = creatorRank(db.approvedCount(edvie.creator_id));
     if (!db.reviewEdvie(id, 'approved', released.photo.at(-1).file_id)) return;
     db.grantEdvie(edvie.creator_id, id);
+    const rankAfter = creatorRank(db.approvedCount(edvie.creator_id));
     await closeReview('✅ Approved');
     await ctx.api
       .sendPhoto(edvie.creator_id, released.photo.at(-1).file_id, {
@@ -385,6 +392,7 @@ edvies.callbackQuery(/^ea:(ok|no|name|rarity|cost|stats):(\d+)$/, async (ctx) =>
         caption: [
           `🎉 Your Edvie <b>${escape(edvie.name)}</b> was approved and is in the shop now!`,
           'You got one for free: /collection',
+          ...(rankAfter !== rankBefore ? ['', `🎨 You're now <b>${creatorTitle(rankAfter)}</b>!`] : []),
         ].join('\n'),
       })
       .catch(() => {});
@@ -498,7 +506,7 @@ export function showcaseResults(user, filter, offset) {
     id: `e${edvie.id}`,
     photo_file_id: edvie.card_file_id,
     title: `${RARITIES[edvie.rarity].emoji} ${edvie.name}`,
-    description: `${RARITIES[edvie.rarity].label} · ${statsLine(edvie.stats)}${resting.has(edvie.id) ? ' · 😴 resting' : ''}`,
+    description: `${statsLine(edvie.stats)} · ${RARITIES[edvie.rarity].label}${resting.has(edvie.id) ? ' · 😴 resting' : ''}`,
     caption: [describe(edvie, creatorName(edvie)), '', `👤 ${displayName(user)}'s Edvie`].join('\n'),
     ...CAPTION,
     reply_markup: new InlineKeyboard().switchInlineCurrent(`⚔️ Battle ${edvie.name}`, `vs ${user.user_id}.${edvie.id}`),
@@ -522,7 +530,12 @@ function restingNote(edvie, owner) {
 const fighterLine = (edvie, owner) =>
   `${RARITIES[edvie.rarity].emoji} <b>${escape(edvie.name)}</b> · ${displayName(owner)}\n${statsLine(edvie.stats)}`;
 
-/** "@bot vs <owner>.<edvie>": the user picks which of their Edvies fights. Resting ones aren't offered. */
+/**
+ * "@bot vs <owner>.<edvie>": the user picks which of their Edvies fights.
+ * Resting ones aren't offered. The "Random fighter" article on top also keeps
+ * Telegram from showing the Edvies as a bare picture grid: a list with at
+ * least one text result shows every picture's title and specs next to it.
+ */
 export function battlePickResults(user, match) {
   const [ownerId, edvieId] = [Number(match[1]), Number(match[2])];
   const unavailable = (text) => ({ results: [], button: { text, start_parameter: 'edvies' } });
@@ -538,30 +551,47 @@ export function battlePickResults(user, match) {
   const resting = db.restingEdvies(user.user_id);
   const mine = owned.filter((edvie) => !resting.has(edvie.id));
 
-  const results = mine.slice(0, 50).map((edvie) => ({
+  const intro = (mineLine) => ['⚔️ <b>EDVIE BATTLE</b>', '', fighterLine(theirs, owner), '🆚', mineLine].join('\n');
+  const fightButton = (mineId) => new InlineKeyboard().text('⚔️ Fight!', `eb:${ownerId}:${edvieId}:${user.user_id}:${mineId}`);
+
+  const random = {
+    type: 'article',
+    id: 'random',
+    title: '🎲 Random fighter',
+    description: `vs ${theirs.name} (${statsLine(theirs.stats)}). Let fate pick one of your ${mine.length} ready Edvies`,
+    input_message_content: { message_text: intro(`🎲 <b>A random fighter</b> · ${displayName(user)}`), ...HTML },
+    reply_markup: fightButton(0),
+  };
+  const picks = mine.slice(0, 49).map((edvie) => ({
     type: 'photo',
     id: `b${edvie.id}`,
     photo_file_id: edvie.card_file_id,
-    title: `⚔️ Fight with ${edvie.name}`,
-    description: `${RARITIES[edvie.rarity].label} · ${statsLine(edvie.stats)}`,
-    caption: ['⚔️ <b>EDVIE BATTLE</b>', '', fighterLine(theirs, owner), '🆚', fighterLine(edvie, user)].join('\n'),
+    title: `${RARITIES[edvie.rarity].emoji} ${edvie.name}`,
+    description: `${statsLine(edvie.stats)} · ${RARITIES[edvie.rarity].label}`,
+    caption: intro(fighterLine(edvie, user)),
     ...CAPTION,
-    reply_markup: new InlineKeyboard().text(
-      '⚔️ Fight!',
-      `eb:${ownerId}:${edvieId}:${user.user_id}:${edvie.id}`,
-    ),
+    reply_markup: fightButton(edvie.id),
   }));
-  return { results };
+  return { results: [random, ...picks] };
 }
 
 // Each Fight message is fought once; the Battle button it came from can be used again.
+// The challenger's Edvie id is 0 for "Random fighter": it's picked when the fight starts.
 edvies.callbackQuery(/^eb:(\d+):(\d+):(\d+):(\d+)$/, async (ctx) => {
   const messageId = ctx.callbackQuery.inline_message_id;
-  const [ownerA, edvieA, ownerB, edvieB] = ctx.match.slice(1, 5).map(Number);
+  const [ownerA, edvieA, ownerB, chosenB] = ctx.match.slice(1, 5).map(Number);
   if (![ownerA, ownerB].includes(ctx.from.id)) {
     return ctx.answerCallbackQuery({ text: 'Only the two trainers can start this fight.' });
   }
   if (!messageId || db.isEdvieBattleOver(messageId)) return ctx.answerCallbackQuery({ text: 'This battle is already over.' });
+
+  let edvieB = chosenB;
+  if (chosenB === 0) {
+    const resting = db.restingEdvies(ownerB);
+    const ready = db.ownedEdvies(ownerB).filter((edvie) => !resting.has(edvie.id));
+    if (!ready.length) return ctx.answerCallbackQuery({ text: 'No Edvie is ready to fight.', show_alert: true });
+    edvieB = ready[Math.floor(Math.random() * ready.length)].id;
+  }
 
   const [a, b] = [db.getEdvie(edvieA), db.getEdvie(edvieB)];
   const [userA, userB] = [db.getUser(ownerA), db.getUser(ownerB)];
@@ -595,6 +625,7 @@ edvies.callbackQuery(/^eb:(\d+):(\d+):(\d+):(\d+)$/, async (ctx) => {
     '',
     `🏆 ${winnerName}'s <b>${escape(winner === 0 ? a.name : b.name)}</b> wins!${paid ? ` +${paid} 🪙` : ''}`,
   ].join('\n');
-  // No reply_markup: the Fight button disappears.
-  await ctx.editMessageCaption({ caption, ...CAPTION }).catch(ignoreNotModified);
+  // No reply_markup: the Fight button disappears. A random fight was sent as text, not a photo.
+  const edited = chosenB === 0 ? ctx.editMessageText(caption, HTML) : ctx.editMessageCaption({ caption, ...CAPTION });
+  await edited.catch(ignoreNotModified);
 });

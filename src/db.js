@@ -204,6 +204,7 @@ const q = {
   nameTaken: db.prepare(
     "SELECT 1 FROM edvies WHERE lower(name) = lower(?) AND status != 'rejected' AND id != ?",
   ),
+  approvedByCreator: db.prepare("SELECT COUNT(*) AS n FROM edvies WHERE creator_id = ? AND status = 'approved'"),
   pendingByCreator: db.prepare("SELECT COUNT(*) AS n FROM edvies WHERE creator_id = ? AND status = 'pending'"),
   pending: db.prepare("SELECT * FROM edvies WHERE status = 'pending' ORDER BY id"),
   released: db.prepare(
@@ -369,6 +370,10 @@ export function reviewEdvie(id, status, cardFileId = null) {
 
 export function edvieNameTaken(name, exceptId = 0) {
   return !!q.nameTaken.get(name, exceptId);
+}
+
+export function approvedCount(creatorId) {
+  return q.approvedByCreator.get(creatorId).n;
 }
 
 export function pendingCount(creatorId) {

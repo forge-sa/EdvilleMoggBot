@@ -11,6 +11,10 @@ or group and tap one of the buttons that pop up above the message box:
 * **Your Edvies**, as cards: send one to show it off, with a **⚔️ Battle**
   button under it. `@EdvilleMoggBot <name>` finds one by name.
 
+Inline results that are only pictures appear as a bare picture grid, so the
+bot always puts a text result among them (your card, or "🎲 Random fighter").
+Telegram then shows a list with each Edvie's name and specs next to its card.
+
 The bot doesn't have to be a member of that chat.
 
 ## How it works
@@ -96,6 +100,11 @@ community**. The code contains none; they live in the database.
   **edit Name / Rarity / Cost / Specs** buttons. `/review` lists everything
   still waiting. Nothing reaches the shop before it's approved; the creator
   is told either way and gets their Edvie for free when it's approved.
+* **Creator ranks**: 5 approved Edvies make you **Creator Rank I**, every 5
+  more is a rank up to **Rank X** at 50, and 55 or more is **Creator
+  Grandmaster**. The rank is shown on your Moggmeter card, after your name on
+  every Edvie you made ("🎨 by Elon Musk (III)"), and the approval message tells
+  you when you rank up. `creatorRank()` in `src/edvie.js`.
 * **Cards** are rendered images (`src/edvieImage.js`): the rarity's colour as
   background, the sprite, the name and specs. That's what the shop, the
   collection and inline mode show.
@@ -105,8 +114,8 @@ community**. The code contains none; they live in the database.
 * **Shop and collection** in the bot's chat: `/shop`, `/collection`,
   `/edvies` (coins and everything else). One card at a time with ◀️ ▶️.
 * **Edvie battles**: someone sends an Edvie into a chat; anyone else taps
-  **⚔️ Battle**, picks one of their own Edvies (inline, as cards) and presses
-  **⚔️ Fight!**. The faster Edvie strikes first (a coin flip on equal
+  **⚔️ Battle**, picks one of their own Edvies (inline, each with its specs)
+  or **🎲 Random fighter**, and presses **⚔️ Fight!**. The faster Edvie strikes first (a coin flip on equal
   Speed), then they take turns: a hit is a quarter of the attacker's Damage
   ±20%, one in ten is a critical ×1.5. Each Fight message is fought once; the
   Battle button can be used again and again.

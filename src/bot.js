@@ -6,11 +6,15 @@ import { FIELDS, FIELD_ORDER, consensus } from './fields.js';
 import { HTML, cardKeyboard, cardText, displayName, hiddenCardText, ownCardKeyboard } from './card.js';
 import { DUEL_DATA, fight, offerKeyboard, offerText, resultText } from './duel.js';
 import { edvillianity, tier } from './score.js';
+import { creatorRank, creatorTitle } from './edvie.js';
 import { BATTLE_QUERY, battlePickResults, edvies, sendGallery, showHub, showcaseResults } from './edvieBot.js';
 
 export const bot = new Bot(config.token);
 
-const stats = (userId) => ({ rep: db.rep(userId), ...db.duelRecord(userId) });
+const stats = (userId) => {
+  const rank = creatorRank(db.approvedCount(userId));
+  return { rep: db.rep(userId), ...db.duelRecord(userId), creatorTitle: rank && creatorTitle(rank) };
+};
 
 // Keep names on cards fresh: every update refreshes the sender's name.
 bot.use(async (ctx, next) => {
@@ -55,7 +59,9 @@ bot.use(edvies);
 //   ""            card, duel, then Edvies
 //   "@user"/duel  a duel only that person can accept, first
 //   "vs …"        picking an Edvie to fight someone's Edvie (from a Battle button)
-//   anything else Edvies whose name contains it
+//   anything else Edvies whose name contains it, then the card. Any text
+//                 result next to the pictures makes Telegram show a list with
+//                 each Edvie's name and specs instead of a bare picture grid.
 
 bot.on('inline_query', async (ctx) => {
   const user = db.getUser(ctx.from.id);
@@ -112,7 +118,7 @@ bot.on('inline_query', async (ctx) => {
 
   let results;
   if (wantsDuel) results = [duel, card];
-  else if (query) results = edvieResults.length ? edvieResults : [duel, card];
+  else if (query) results = edvieResults.length ? [...edvieResults, card] : [duel, card];
   else results = [card, duel, ...edvieResults];
 
   const button = config.webappUrl

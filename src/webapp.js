@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { config } from './config.js';
 import * as db from './db.js';
-import { RARITIES, STATS } from './edvie.js';
+import { RARITIES, STATS, creatorRank } from './edvie.js';
 
 // The Edvies Mini App: a page with the user's collection and the shop, plus a
 // tiny JSON API behind it. Every API call carries Telegram's signed initData,
@@ -37,9 +37,12 @@ function verifyInitData(initData) {
   }
 }
 
+/** "Elon Musk (III)": the creator's name with their creator rank, if any. */
 const creatorName = (edvie) => {
   const user = db.getUser(edvie.creator_id);
-  return user?.name ?? user?.first_name ?? 'someone';
+  const name = user?.name ?? user?.first_name ?? 'someone';
+  const rank = user && creatorRank(db.approvedCount(user.user_id));
+  return rank ? `${name} (${rank})` : name;
 };
 
 const publicEdvie = (edvie) => ({

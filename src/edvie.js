@@ -30,6 +30,21 @@ const statNames = (stats) => {
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
 };
 
+// Creator ranks: Rank I at 5 approved Edvies, one rank up every 5 more up to
+// Rank X at 50, then Grandmaster from 55.
+export const CREATOR_RANK_STEP = 5;
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+/** 'I'…'X', 'Grandmaster', or null below Rank I. */
+export function creatorRank(approved) {
+  const level = Math.floor(approved / CREATOR_RANK_STEP);
+  if (level < 1) return null;
+  return level > ROMAN.length ? 'Grandmaster' : ROMAN[level - 1];
+}
+
+/** "Creator Rank III" / "Creator Grandmaster". */
+export const creatorTitle = (rank) => (rank === 'Grandmaster' ? 'Creator Grandmaster' : `Creator Rank ${rank}`);
+
 export const rarityLine = (edvie) => `${RARITIES[edvie.rarity].emoji} ${RARITIES[edvie.rarity].label}`;
 export const priceRange = (rarity) => `${RARITIES[rarity].price[0]}–${RARITIES[rarity].price[1]} 🪙`;
 export const statsLine = (stats) => STATS.map((s) => `${s.emoji} ${stats[s.key]}`).join(' · ');
